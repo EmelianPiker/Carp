@@ -120,25 +120,10 @@
 ;; (test1 T) ; => T
 ;; (expand '(test1 T)) ; => hangs
 
+;; This doesn't work yet
 (defn main []
-  (let [ret false
-        f (fn []
-            (set! ret true))]
-    (do
-      (f)
-      (IO.println &(str ret)))))
-
-(defn main []
-  (let [ret false
-        f (fn []
-            (let [x 10]
-              (set! x 11)))]
-    (do
-      (f)
-      (IO.println &(str ret)))))
-
-(defn main2 []
-  (let [x 10]
-    (do
-      (set! x 11)
-      (println* x))))
+  (let [f (fn [x]
+            ((fn [y]
+               ((fn [z]
+                  (+ x (+ y z))) 4)) 40))]
+    (println* (f 400))))
