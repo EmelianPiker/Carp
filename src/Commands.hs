@@ -582,8 +582,10 @@ commandAppend [xs, ys] =
   case (xs, ys) of
     (XObj (Lst lst1) i t, XObj (Lst lst2) _ _) ->
       return (Right (XObj (Lst (lst1 ++ lst2)) i t)) -- TODO: should they get their own i:s and t:s
+    (XObj (Arr arr1) i t, XObj (Arr arr2) _ _) ->
+      return (Right (XObj (Arr (arr1 ++ arr2)) i t))
     _ ->
-      return (Left (EvalError "Applying 'append' to non-list or empty list." (info xs)))
+      return (Left (EvalError "Applying 'append' to non-array/list or empty list." (info xs)))
 
 commandMacroError :: CommandCallback
 commandMacroError [msg] =
@@ -715,6 +717,14 @@ commandSymJoin [a] =
         Right result -> Right (XObj (Sym (SymPath [] (join (map show result))) (LookupGlobal CarpLand AVariable)) (Just dummyInfo) Nothing)
     _ ->
       Left (EvalError ("Can't call join with " ++ pretty a) (info a))
+
+commandSymPrefix :: CommandCallback
+commandSymPrefix [XObj (Sym (SymPath [] prefix) _) _ _, XObj (Sym (SymPath [] suffix) _) i t] =
+  return $ Right (XObj (Sym (SymPath [prefix] suffix) (LookupGlobal CarpLand AVariable)) i t)
+commandSymPrefix [x, XObj (Sym (SymPath [] _) _) _ _] =
+  return $ Left (EvalError ("Can’t call `prefix` with " ++ pretty x) (info x))
+commandSymPrefix [_, x] =
+  return $ Left (EvalError ("Can’t call `prefix` with " ++ pretty x) (info x))
 
 commandStringDirectory :: CommandCallback
 commandStringDirectory [a] =
