@@ -120,12 +120,10 @@
 ;; (test1 T) ; => T
 ;; (expand '(test1 T)) ; => hangs
 
-(defn x [] (IO.println &(str (+ 22 3))))
-
-(defmacro after-x [body]
-  (list 'do
-        (list x) ; misspelled because not quoted
-        body))
+(defn pair-arr [arr]
+  (Pair.init 1 arr))
 
 (defn main []
-  (IO.println &(str (after-x "test"))))
+  (let-do [arr [1]]
+    (set! arr @(Pair.b &(pair-arr arr)))
+    (println* &arr)))
