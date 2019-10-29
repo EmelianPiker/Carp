@@ -95,16 +95,6 @@
 ;;(unsafe-last b)
 
 
-;; (defn dangling-1 []
-;;   (let [b [1 2 3]]
-;;     &b))
-
-;; (defn dangling-2 []
-;;   (let [b [1 2 3]
-;;         r &b]
-;;     r))
-
-
 ;; (defn unique []
 ;;   (let [r1 (the &String "DATA")
 ;;         r2 (the &String "DATA") ;; should get another lifetime variable than r1
@@ -165,14 +155,51 @@
 
 
 
-(deftype Blah [x Int])
+;; (deftype Blah [x Int])
 
-(defn trick []
-  (let[s1 (Blah.init 100)
-       r1 &s1
-       g (let [s2 (Blah.init 200)
-               r2 &s2
-               f (fn [] (println* r1 r2))]
-           f)]
-    (g) ;; shouldn't work because 's2' has been deleted and 'r2' is thus a dead reference
-    ))
+;; (defn trick []
+;;   (let[s1 (Blah.init 100)
+;;        r1 &s1
+;;        g (let [s2 (Blah.init 200)
+;;                r2 &s2
+;;                f (fn [] (println* r1 r2))]
+;;            f)]
+;;     (g) ;; shouldn't work because 's2' has been deleted and 'r2' is thus a dead reference
+;;     ))
+
+
+;; (defmodule Pair
+;;   (defn = [p1 p2]
+;;     (and (= (Pair.a &p1) (Pair.a &p2))
+;;          (= (Pair.b &p1) (Pair.b &p2)))))
+
+
+
+
+;; (use Array)
+
+;; (defn f [xs]
+;;   (let-do [result (nth xs 0)]
+;;     (let [x (nth xs 0)]
+;;       ())
+;;     @result))
+
+;;(defn idref [x] (the (Ref a b) x))
+
+
+(defn dangling-1 []
+  (let [b [1 2 3]]
+    &b))
+
+(defn dangling-2 []
+  (let [b [1 2 3]
+        r &b]
+    r))
+
+(defn dangling-3 [xs]
+  (let [r (Array.nth xs 0)]
+    r))
+
+(defn dangling-4 [r]
+  (let [q (Array.nth r 0)]
+    q))
