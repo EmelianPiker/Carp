@@ -40,6 +40,7 @@ data Ty = IntTy
         | ModuleTy
         | PointerTy Ty
         | RefTy Ty Ty -- second Ty is the lifetime
+        | LifetimeTy SymPath
         | StaticLifetimeTy
         | StructTy String [Ty] -- the name of the struct, and it's type parameters
         | TypeTy -- the type of types
@@ -96,6 +97,7 @@ instance Show Ty where
     -- where listView = "(Ref " ++ show r ++ ")"
     "(Ref " ++ show r ++ " " ++ show lt ++ ")"
   show StaticLifetimeTy      = "StaticLifetime"
+  show (LifetimeTy path)     = "(Lifetime '" ++ show path ++ "')"
   show MacroTy               = "Macro"
   show DynamicTy             = "Dynamic"
 
@@ -243,6 +245,8 @@ unifySignatures v t = Map.fromList (unify v t)
         unify (RefTy a ltA) (RefTy b ltB) = unify a b ++ unify ltA ltB
         unify a@(RefTy _ _) b = [] -- error ("Can't unify " ++ show a ++ " with " ++ show b)
 
+        unify (LifetimeTy (SymPath pathA _)) (LifetimeTy (SymPath pathB _)) = []
+
         unify (FuncTy ltA argTysA retTyA) (FuncTy ltB argTysB retTyB) =
           let argToks = concat (zipWith unify argTysA argTysB)
               retToks = unify retTyA retTyB
@@ -267,6 +271,7 @@ areUnifiable (PointerTy a) (PointerTy b) = areUnifiable a b
 areUnifiable (PointerTy _) _ = False
 areUnifiable (RefTy a ltA) (RefTy b ltB) = areUnifiable a b && areUnifiable ltA ltB
 areUnifiable (RefTy _ _) _ = False
+areUnifiable (LifetimeTy (SymPath pathA _)) (LifetimeTy (SymPath pathB _)) = pathA == pathB
 areUnifiable (FuncTy ltA argTysA retTyA) (FuncTy ltB argTysB retTyB)
   | length argTysA /= length argTysB = False
   | otherwise = let argBools = zipWith areUnifiable argTysA argTysB

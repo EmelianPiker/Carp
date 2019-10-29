@@ -104,7 +104,14 @@ debugSolveOne mappings constraint = let m' = solveOneInternal mappings constrain
 
 solveOneInternal :: TypeMappings -> Constraint -> Either UnificationFailure TypeMappings
 solveOneInternal mappings constraint =
-  case constraint of --trace ("SOLVE " ++ show constraint) constraint of
+  --case trace ("SOLVE " ++ show constraint) constraint of
+  case constraint of
+
+    Constraint (LifetimeTy (SymPath pathA _)) (LifetimeTy (SymPath pathB _)) _ _ _ _ ->
+      if pathA == pathB
+      then Right mappings
+      else Left (UnificationFailure constraint mappings)
+
     -- Two type variables
     Constraint aTy@(VarTy aName) bTy@(VarTy bName) _ _ _ _ ->
       if aTy == bTy
@@ -166,6 +173,7 @@ checkForConflict mappings constraint name otherTy =
     else
       case found of --trace ("CHECK CONFLICT " ++ show constraint ++ " with name " ++ name ++ ", otherTy: " ++ show otherTy ++ ", found: " ++ show found) found of
         Just (VarTy _) -> ok
+        Just (LifetimeTy _) -> ok
         Just (StructTy structName structTyVars) ->
           case otherTy of
             StructTy otherStructName otherTyVars | structName == otherStructName ->

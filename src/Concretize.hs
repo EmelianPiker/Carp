@@ -1223,14 +1223,6 @@ manageMemory typeEnv globalEnv root =
                Right _ -> do manage to --(trace ("Transfered from " ++ getName from ++ " '" ++ varOfXObj from ++ "' to " ++ getName to ++ " '" ++ varOfXObj to ++ "'") to)
                              return (Right ())
 
-        varOfXObj :: XObj -> String
-        varOfXObj xobj =
-          case xobj of
-            XObj (Sym path _) _ _ -> pathToC path
-            _ -> case info xobj of
-                   Just i -> freshVar i
-                   Nothing -> error ("Missing info on " ++ show xobj)
-
 suffixTyVars :: String -> Ty -> Ty
 suffixTyVars suffix t =
   case t of

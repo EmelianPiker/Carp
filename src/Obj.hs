@@ -846,3 +846,11 @@ isLiteral _ = False
 -- construct an empty list xobj
 emptyList :: XObj
 emptyList = XObj (Lst []) Nothing Nothing
+
+varOfXObj :: XObj -> String
+varOfXObj xobj =
+  case xobj of
+    XObj (Sym path _) _ _ -> pathToC path
+    _ -> case info xobj of
+           Just i -> freshVar i
+           Nothing -> error ("Missing info on " ++ show xobj)
