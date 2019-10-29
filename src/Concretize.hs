@@ -622,29 +622,18 @@ setDeletersOnInfo i deleters = fmap (\i' -> i' { infoDelete = deleters }) i
 del :: XObj -> Set.Set Deleter -> XObj
 del xobj deleters = xobj { info = setDeletersOnInfo (info xobj) deleters }
 
--- | Differentiate between lifetimes depending on variables in a lexical scope and depending on something outside the function
-data LifetimeMode = LifetimeInsideFunction String
-                  | LifetimeOutsideFunction
-                  deriving Show
-
 -- | To keep track of the deleters when recursively walking the form.
 data MemState = MemState
                 { memStateDeleters :: Set.Set Deleter
                 , memStateDeps :: [XObj]
-                , memStateLifetimes :: Map.Map String LifetimeMode
                 } deriving Show
-
-prettyLifetimeMappings :: Map.Map String LifetimeMode -> String
-prettyLifetimeMappings mappings =
-  joinWith "\n" (map prettyMapping (Map.toList mappings))
-  where prettyMapping (key, value) = "  " ++ key ++ " => " ++ show value
 
 -- | Find out what deleters are needed and where in an XObj.
 -- | Deleters will be added to the info field on XObj so that
 -- | the code emitter can access them and insert calls to destructors.
 manageMemory :: TypeEnv -> Env -> XObj -> Either TypeError (XObj, [XObj])
 manageMemory typeEnv globalEnv root =
-  let (finalObj, finalState) = runState (visit root) (MemState (Set.fromList []) [] (Map.empty))
+  let (finalObj, finalState) = runState (visit root) (MemState (Set.fromList []) [])
       deleteThese = memStateDeleters finalState
       deps = memStateDeps finalState
   in  -- (trace ("Delete these: " ++ joinWithComma (map show (Set.toList deleteThese)))) $
@@ -659,15 +648,14 @@ manageMemory typeEnv globalEnv root =
                     Lst _ -> visitList xobj
                     Arr _ -> visitArray xobj
                     Str _ -> do manage xobj
-                                addToLifetimesMappingsIfRef False xobj -- TODO: Should "internal = True" here?
                                 return (Right xobj)
                     Pattern _ -> do manage xobj
-                                    addToLifetimesMappingsIfRef False xobj
                                     return (Right xobj)
                     _ ->
                       return (Right xobj)
+             s <- get
              case r of
-               Right ok -> checkThatRefTargetIsAlive ok
+               Right ok -> return (checkThatRefTargetIsAlive (memStateDeleters s) ok)
                Left err -> return (Left err)
 
         visitArray :: XObj -> State MemState (Either TypeError XObj)
@@ -700,14 +688,12 @@ manageMemory typeEnv globalEnv root =
                               modify (\memState ->
                                          memState { memStateDeleters = Set.insert (FakeDeleter cap) (memStateDeleters memState) }))
                           (map getName captures)
-                        mapM_ (addToLifetimesMappingsIfRef False) argList
-                        mapM_ (addToLifetimesMappingsIfRef False) captures -- For captured variables inside of lifted lambdas
                         visitedBody <- visit  body
                         result <- unmanage body
                         return $
                           case result of
                             Left e -> Left e
-                            Right _ ->
+                            Right ok ->
                               do okBody <- visitedBody
                                  return (XObj (Lst [defn, nameSymbol, args, okBody]) i t)
 
@@ -736,18 +722,18 @@ manageMemory typeEnv globalEnv root =
                 -- RefTy _ _ ->
                 --   return (Left (LetCantReturnRefTy xobj letReturnType))
                 _ ->
-                  do MemState preDeleters _ _ <- get
+                  do MemState preDeleters _ <- get
                      visitedBindings <- mapM visitLetBinding (pairwise bindings)
                      visitedBody <- visit  body
                      result <- unmanage body
                      case result of
                        Left e -> return (Left e)
                        Right _ ->
-                         do MemState postDeleters deps postLifetimes <- get
+                         do MemState postDeleters deps <- get
                             let diff = postDeleters Set.\\ preDeleters
                                 newInfo = setDeletersOnInfo i diff
                                 survivors = postDeleters Set.\\ diff -- Same as just pre deleters, right?!
-                            put (MemState survivors deps postLifetimes)
+                            put (MemState survivors deps)
                             --trace ("LET Pre: " ++ show preDeleters ++ "\nPost: " ++ show postDeleters ++ "\nDiff: " ++ show diff ++ "\nSurvivors: " ++ show survivors)
                             manage xobj
                             return $ do okBody <- visitedBody
@@ -767,7 +753,7 @@ manageMemory typeEnv globalEnv root =
                    Left err ->
                      return (Left err)
                    Right (okCorrectVariable, okMode) ->
-                     do MemState preDeleters _ _ <- get
+                     do MemState preDeleters _ <- get
                         ownsTheVarBefore <- case createDeleter okCorrectVariable of
                                               Nothing -> return (Right ())
                                               Just d -> if Set.member d preDeleters || isLookupGlobal okMode
@@ -776,7 +762,7 @@ manageMemory typeEnv globalEnv root =
 
                         visitedValue <- visit  value
                         unmanage value -- The assigned value can't be used anymore
-                        MemState managed deps postLifetimes <- get
+                        MemState managed deps <- get
                         -- Delete the value previously stored in the variable, if it's still alive
                         let deleters = case createDeleter okCorrectVariable of
                                          Just d  -> Set.fromList [d]
@@ -844,17 +830,17 @@ manageMemory typeEnv globalEnv root =
                                           return (XObj (Lst (doExpr : okExpressions)) i t)
 
             [whileExpr@(XObj While _ _), expr, body] ->
-              do MemState preDeleters _ _ <- get
+              do MemState preDeleters _ <- get
                  visitedExpr <- visit  expr
-                 MemState afterExprDeleters _ _ <- get
+                 MemState afterExprDeleters _ <- get
                  visitedBody <- visit  body
                  manage body
-                 MemState postDeleters deps postLifetimes <- get
+                 MemState postDeleters deps <- get
                  -- Visit an extra time to simulate repeated use
                  visitedExpr2 <- visit  expr
                  visitedBody2 <- visit  body
                  let diff = postDeleters \\ preDeleters
-                 put (MemState (postDeleters \\ diff) deps postLifetimes) -- Same as just pre deleters, right?!
+                 put (MemState (postDeleters \\ diff) deps) -- Same as just pre deleters, right?!
                  return $ do okExpr <- visitedExpr
                              okBody <- visitedBody
                              okExpr2 <- visitedExpr2 -- This evaluates the second visit so that it actually produces the error
@@ -868,7 +854,7 @@ manageMemory typeEnv globalEnv root =
 
             [ifExpr@(XObj If _ _), expr, ifTrue, ifFalse] ->
               do visitedExpr <- visit  expr
-                 MemState preDeleters deps lifetimes <- get
+                 MemState preDeleters deps <- get
 
                  let (visitedTrue,  stillAliveTrue)  = runState (do { v <- visit  ifTrue;
                                                                       result <- transferOwnership  ifTrue xobj;
@@ -876,7 +862,7 @@ manageMemory typeEnv globalEnv root =
                                                                                  Left e -> error (show e)
                                                                                  Right () -> v
                                                                     })
-                                                       (MemState preDeleters deps lifetimes)
+                                                       (MemState preDeleters deps)
 
                      (visitedFalse, stillAliveFalse) = runState (do { v <- visit  ifFalse;
                                                                       result <- transferOwnership   ifFalse xobj;
@@ -884,7 +870,7 @@ manageMemory typeEnv globalEnv root =
                                                                                  Left e -> error (show e)
                                                                                  Right () -> v
                                                                     })
-                                                       (MemState preDeleters deps lifetimes)
+                                                       (MemState preDeleters deps)
 
                  let deletedInTrue  = preDeleters \\ memStateDeleters stillAliveTrue
                      deletedInFalse = preDeleters \\ memStateDeleters stillAliveFalse
@@ -919,7 +905,7 @@ manageMemory typeEnv globalEnv root =
                                         "depsAfter: " ++ show depsAfter ++ "\n"
                                        )
 
-                 put (MemState stillAliveAfter depsAfter lifetimes)
+                 put (MemState stillAliveAfter depsAfter)
                  manage xobj
 
                  return $ do okExpr  <- visitedExpr
@@ -938,7 +924,7 @@ manageMemory typeEnv globalEnv root =
                    Left e -> return (Left e)
                    Right okVisitedExpr ->
                      do unmanage okVisitedExpr
-                        MemState preDeleters deps lifetimes <- get
+                        MemState preDeleters deps <- get
                         vistedCasesAndDeps <- mapM visitMatchCase (pairwise cases)
                         case sequence vistedCasesAndDeps of
                           Left e -> return (Left e)
@@ -946,7 +932,7 @@ manageMemory typeEnv globalEnv root =
                             let visitedCases = map fst okCasesAndDeps
                                 depsFromCases = concatMap snd okCasesAndDeps
                                 (finalXObj, postDeleters) = figureOutStuff okVisitedExpr visitedCases preDeleters
-                            in  do put (MemState postDeleters (deps ++ depsFromCases) lifetimes)
+                            in  do put (MemState postDeleters (deps ++ depsFromCases))
                                    manage xobj
                                    return (Right finalXObj)
 
@@ -1003,13 +989,13 @@ manageMemory typeEnv globalEnv root =
 
         visitMatchCase :: (XObj, XObj) -> State MemState (Either TypeError ((Set.Set Deleter, (XObj, XObj)), [XObj]))
         visitMatchCase (lhs@(XObj _ lhsInfo _), rhs@XObj{}) =
-          do MemState preDeleters preDeps preLifetimes <- get
+          do MemState preDeleters preDeps <- get
              _ <- visitCaseLhs lhs
              visitedRhs <- visit rhs
              unmanage rhs
-             MemState postDeleters postDeps postLifetimes <- get
+             MemState postDeleters postDeps <- get
              let diff = postDeleters \\ preDeleters
-             put (MemState preDeleters postDeps postLifetimes) -- Restore managed variables, TODO: Use a "local" state monad instead?
+             put (MemState preDeleters postDeps) -- Restore managed variables, TODO: Use a "local" state monad instead?
              return $ do okVisitedRhs <- visitedRhs
                          -- trace ("\npre: " ++ show preDeleters ++
                          --        "\npost: " ++ show postDeleters ++
@@ -1041,81 +1027,37 @@ manageMemory typeEnv globalEnv root =
         visitCaseLhs _ =
           return (Right []) -- TODO: Handle nesting!!!
 
-        addToLifetimesMappingsIfRef :: Bool -> XObj -> State MemState ()
-        addToLifetimesMappingsIfRef internal xobj =
+        checkThatRefTargetIsAlive :: Set.Set Deleter -> XObj -> Either TypeError XObj
+        checkThatRefTargetIsAlive deleters xobj =
           case ty xobj of
-            Just (RefTy _ (VarTy lt)) ->
-              do m@(MemState _ _ lifetimes) <- get
-                 case Map.lookup lt lifetimes of
-                   Just existing ->
-                     --trace ("\nThere is already a mapping for '" ++ pretty xobj ++ "' from the lifetime '" ++ lt ++ "' to " ++ show existing ++ ", won't add " ++ show (makeLifetimeMode xobj)) $
-                     return ()
-                   Nothing ->
-                     do let lifetimes' = Map.insert lt (makeLifetimeMode xobj) lifetimes
-                        put $ --(trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show (makeLifetimeMode xobj) ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
-                          m { memStateLifetimes = lifetimes' }
-                        return ()
-            Just notThisType ->
-              --trace ("Won't add to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
-              return ()
+            Just (RefTy _ (LifetimeTy path)) ->
+              performCheck path
+            Just (FuncTy (LifetimeTy path) _ _) ->
+              performCheck path
             _ ->
-              --trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
-              return ()
-            where makeLifetimeMode xobj =
-                    if internal then
-                      LifetimeInsideFunction $
-                      case xobj of
-                        XObj (Lst [(XObj Ref _ _), target]) _ _ -> varOfXObj target
-                        _ -> varOfXObj xobj
-                    else
-                      LifetimeOutsideFunction
+              Right xobj
 
-        checkThatRefTargetIsAlive :: XObj -> State MemState (Either TypeError XObj)
-        checkThatRefTargetIsAlive xobj =
-          case ty xobj of
-            Just (RefTy _ (VarTy lt)) ->
-              performCheck lt
-            Just (FuncTy (VarTy lt) _ _) ->
-              performCheck lt
-            _ ->
-              return (Right xobj)
-
-          where performCheck :: String -> State MemState (Either TypeError XObj)
-                performCheck lt =
-                  do MemState deleters _ lifetimeMappings <- get
-                     case Map.lookup lt lifetimeMappings of
-                       Just (LifetimeInsideFunction deleterName) ->
-                         let matchingDeleters = Set.toList $ Set.filter (\case
-                                                                            ProperDeleter { deleterVariable = dv } -> dv == deleterName
-                                                                            FakeDeleter   { deleterVariable = dv } -> dv == deleterName
-                                                                            PrimDeleter   { aliveVariable = dv } -> dv == deleterName
-                                                                            RefDeleter    { refVariable = dv } -> dv == deleterName
-                                                                        )
-                                                deleters
-                         in case matchingDeleters of
-                              [] ->
-                                --trace ("Can't use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
+          where performCheck :: SymPath -> Either TypeError XObj
+                performCheck (SymPath _ deleterName) =
+                     let matchingDeleters = Set.toList $ Set.filter (\case
+                                                                        ProperDeleter { deleterVariable = dv } -> dv == deleterName
+                                                                        FakeDeleter   { deleterVariable = dv } -> dv == deleterName
+                                                                        PrimDeleter   { aliveVariable = dv } -> dv == deleterName
+                                                                        RefDeleter    { refVariable = dv } -> dv == deleterName
+                                                                    )
+                                                         deleters
+                     in case matchingDeleters of
+                       [] ->
+                         --trace ("Can't use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
                                 --return (Right xobj)
-                                return (Left (UsingDeadReference xobj deleterName))
-                              _ ->
-                                -- trace ("CAN use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
-                                return (Right xobj)
-                       Just LifetimeOutsideFunction ->
-                         --trace ("Lifetime OUTSIDE function: " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
-                         return (Right xobj)
-                       Nothing ->
-                         case xobj of
-                           -- XObj (Sym _ (LookupLocal Capture)) _ _ ->
-                           --   -- Ignore these for the moment! TODO: FIX!!!
-                           --   return (Right xobj)
-                           _ ->
-                             --trace ("Failed to find lifetime key '" ++ lt ++ "' for " ++ pretty xobj ++ " in mappings at " ++ prettyInfoFromXObj xobj) $
-                             return (Right xobj)
+                         Left (UsingDeadReference xobj deleterName)
+                       _ ->
+                         -- trace ("CAN use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
+                         Right xobj
 
         visitLetBinding :: (XObj, XObj) -> State MemState (Either TypeError (XObj, XObj))
         visitLetBinding  (name, expr) =
           do visitedExpr <- visit expr
-             addToLifetimesMappingsIfRef True expr
              result <- transferOwnership expr name
              return $ case result of
                         Left e -> Left e
@@ -1124,17 +1066,13 @@ manageMemory typeEnv globalEnv root =
 
         visitArg :: XObj -> State MemState (Either TypeError XObj)
         visitArg xobj@(XObj _ _ (Just t)) =
-          do afterVisit <- if isManaged typeEnv t
-                           then do visitedXObj <- visit  xobj
-                                   result <- unmanage xobj
-                                   case result of
-                                     Left e  -> return (Left e)
-                                     Right _ -> return visitedXObj
-                           else visit xobj
-             case afterVisit of
-               Right okAfterVisit -> do addToLifetimesMappingsIfRef True okAfterVisit
-                                        return (Right okAfterVisit)
-               Left err -> return (Left err)
+          if isManaged typeEnv t
+          then do visitedXObj <- visit  xobj
+                  result <- unmanage xobj
+                  case result of
+                    Left e  -> return (Left e)
+                    Right _ -> return visitedXObj
+          else visit xobj
         visitArg xobj@XObj{} =
           visit  xobj
 
@@ -1159,11 +1097,11 @@ manageMemory typeEnv globalEnv root =
           if isSymbolThatCaptures xobj -- When visiting lifted lambdas, don't manage symbols that capture (they are owned by the environment).
           then return ()
           else case createDeleter xobj of
-                 Just deleter -> do MemState deleters deps lifetimes <- get
+                 Just deleter -> do MemState deleters deps <- get
                                     let newDeleters = Set.insert deleter deleters
                                         Just t = ty xobj
                                         newDeps = deps ++ depsForDeleteFunc typeEnv globalEnv t
-                                    put (MemState newDeleters newDeps lifetimes)
+                                    put (MemState newDeleters newDeps)
                  Nothing -> return ()
 
         deletersMatchingXObj :: XObj -> Set.Set Deleter -> [Deleter]
@@ -1188,13 +1126,13 @@ manageMemory typeEnv globalEnv root =
           let Just t = ty xobj
               Just i = info xobj
           in if isManaged typeEnv t && not (isGlobalFunc xobj) && not (isExternalType typeEnv t)
-             then do MemState deleters deps lifetimes <- get
+             then do MemState deleters deps <- get
                      case deletersMatchingXObj xobj deleters of
                        [] -> if isSymbolThatCaptures xobj
                              then return (Left (UsingCapturedValue xobj))
                              else return (Left (UsingUnownedValue xobj))
                        [one] -> let newDeleters = Set.delete one deleters
-                                in  do put (MemState newDeleters deps lifetimes)
+                                in  do put (MemState newDeleters deps)
                                        return (Right ())
                        _ -> error "Too many variables with the same name in set."
              else return (Right ())
@@ -1208,7 +1146,7 @@ manageMemory typeEnv globalEnv root =
                                    XObj (Sym _ (LookupGlobal _ _)) _ _ -> True
                                    _ -> False
           in if not isGlobalVariable && not (isGlobalFunc xobj) && isManaged typeEnv t && not (isExternalType typeEnv t) && not (isSymbolThatCaptures xobj) -- TODO: The 'isManaged typeEnv t' boolean check should be removed!
-             then do MemState deleters deps lifetimes <- get
+             then do MemState deleters deps <- get
                      case deletersMatchingXObj xobj deleters of
                        [] ->  return (Left (GettingReferenceToUnownedValue xobj))
                        [_] -> return (return ())

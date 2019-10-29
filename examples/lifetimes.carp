@@ -1,5 +1,15 @@
-(Debug.sanitize-addresses)
+;;(Debug.sanitize-addresses)
 (Project.config "print-ast" true)
+
+;; (defn dangling-1 []
+;;   (let [b [1 2 3]]
+;;     &b))
+
+;; (defn dangling-2 []
+;;   (let [b [1 2 3]
+;;         r &b]
+;;     r))
+
 
 ;; Preventing the usage of a reference to a deleted object
 ;; (defn f []
@@ -94,17 +104,6 @@
 
 ;;(unsafe-last b)
 
-
-;; (defn dangling-1 []
-;;   (let [b [1 2 3]]
-;;     &b))
-
-(defn dangling-2 []
-  (let [b [1 2 3]
-        r &b]
-    r))
-
-
 ;; (defn unique []
 ;;   (let [r1 (the &String "DATA")
 ;;         r2 (the &String "DATA") ;; should get another lifetime variable than r1
@@ -176,3 +175,16 @@
 ;;            f)]
 ;;     (g) ;; shouldn't work because 's2' has been deleted and 'r2' is thus a dead reference
 ;;     ))
+
+;;(defn f [x] &(the (Array Int) x))
+
+(deftype Foo [])
+
+(defn replicate [e]
+  (Foo.copy e))
+
+(info replicate)
+
+;; (defn f []
+;;   (let [x [1 2 3]]
+;;     (replicate &x)))
