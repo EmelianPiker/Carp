@@ -1069,7 +1069,7 @@ manageMemory typeEnv globalEnv root =
              case getVariableName xobj of
                Right refTarget -> if isVariableAlive (Set.toList deleters) refTarget
                                   then tryToAdd xobj refTarget
-                                  else (trace ("Won't add '" ++ refTarget ++ "' to mappings because is not alive at " ++ prettyInfoFromXObj xobj)) $
+                                  else --(trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
                                        return ()
                Left notRefTarget | force -> tryToAdd xobj notRefTarget
                                  | otherwise -> return ()
@@ -1088,21 +1088,21 @@ manageMemory typeEnv globalEnv root =
                              Just existing ->
                                do let extendedSet = Set.insert variableName existing
                                       lifetimes' = Map.insert lt extendedSet lifetimes
-                                  put $ (trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ --(trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
                              Nothing ->
                                do let lifetimes' = Map.insert lt (Set.fromList [variableName]) lifetimes
-                                  put $ (trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ --(trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
 
                       Just notThisType ->
-                        trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
+                        --trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
                       _ ->
-                        trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
+                        --trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
         checkThatRefTargetIsAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
@@ -1131,9 +1131,9 @@ manageMemory typeEnv globalEnv root =
                   if isVariableAlive deleters variableName
                   then -- trace ("CAN use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
                     Right ()
-                  else trace ("Can't use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show variableName ++ ") at " ++ prettyInfoFromXObj xobj ++ "\nMappings: " ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ show deleters ++ "\n") $
-                       Right ()
-                       --Left (UsingDeadReference xobj variableName)
+                  else --trace ("Can't use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show variableName ++ ") at " ++ prettyInfoFromXObj xobj ++ "\nMappings: " ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ show deleters ++ "\n") $
+                       --Right ()
+                       Left (UsingDeadReference xobj variableName)
 
         isVariableAlive :: [Deleter] -> String -> Bool
         isVariableAlive deleters variableName =
