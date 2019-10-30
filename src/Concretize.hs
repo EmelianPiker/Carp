@@ -650,15 +650,13 @@ manageMemory typeEnv globalEnv root =
   in  -- (trace ("Delete these: " ++ joinWithComma (map show (Set.toList deleteThese)))) $
       --(trace ("Final mappings for " ++ getName root ++ ":\n" ++ prettyLifetimeMappings (memStateLifetimes finalState))) $
 
+    -- NOTE: This might seem redundant but for blocks of code that are not 'defn':s there might be things still to delete, for example when initiating globals
       case finalObj of
         Left err -> Left err
         Right ok -> case ok of
-                      -- XObj (Lst (XObj (Defn _) _ _ : _ :  _ : body : _)) _ _ ->
-                      --   case checkThatRefTargetIsAlive Set.empty (memStateLifetimes finalState) body of
-                      --     Left err -> Left err
-                      --     Right () -> let newInfo = fmap (\i -> i { infoDelete = deleteThese }) (info ok)
-                      --                 in  Right (ok { info = newInfo }, deps)
-                      _ -> let newInfo = fmap (\i -> i { infoDelete = deleteThese }) (info ok)
+                      _ -> let newInfo = fmap (\i -> let currentDeleters = infoDelete i
+                                                     in i { infoDelete = Set.union deleteThese currentDeleters })
+                                              (info ok)
                            in  Right (ok { info = newInfo }, deps)
 
   where visit :: XObj -> State MemState (Either TypeError XObj)
@@ -720,12 +718,16 @@ manageMemory typeEnv globalEnv root =
                         --mapM_ (addToLifetimesMappingsIfRef True) captures -- For captured variables inside of lifted lambdas
                         visitedBody <- visit  body
                         result <- unmanage body
+                        s <- get
+                        put s { memStateDeleters = Set.empty } -- Nothing alive after this!
                         return $
                           case result of
                             Left e -> Left e
                             Right _ ->
                               do okBody <- visitedBody
-                                 return (XObj (Lst [defn, nameSymbol, args, okBody]) i t)
+                                 let Just ii = i
+                                     newInfo = ii { infoDelete = memStateDeleters s }
+                                 return (XObj (Lst [defn, nameSymbol, args, okBody]) (Just newInfo) t)
 
             -- Fn / λ (Lambda)
             [fn@(XObj (Fn _ captures) _ _), args@(XObj (Arr argList) _ _), body] ->
@@ -1120,6 +1122,12 @@ manageMemory typeEnv globalEnv root =
               case performCheck lt of
                 Left err -> Left err
                 Right _ -> Right ()
+            Just (FuncTy _ _ (RefTy _ (VarTy lt))) ->
+              case performCheck lt of
+                Left err -> Left err
+                Right _ -> Right ()
+            -- Just t ->
+            --   trace ("Won't check " ++ pretty xobj ++ " : " ++ show t) $ Right ()
             _ ->
               Right ()
 
