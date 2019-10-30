@@ -715,7 +715,7 @@ manageMemory typeEnv globalEnv root =
                                          memState { memStateDeleters = Set.insert (FakeDeleter cap) (memStateDeleters memState) }))
                           (map getName captures)
                         -- mapM_ (addToLifetimesMappingsIfRef True) argList
-                        --mapM_ (addToLifetimesMappingsIfRef True) captures -- For captured variables inside of lifted lambdas
+                        -- mapM_ (addToLifetimesMappingsIfRef True) captures -- For captured variables inside of lifted lambdas
                         visitedBody <- visit  body
                         result <- unmanage body
                         s <- get
@@ -1094,21 +1094,21 @@ manageMemory typeEnv globalEnv root =
                              Just existing ->
                                do let extendedSet = Set.insert variableName existing
                                       lifetimes' = Map.insert lt extendedSet lifetimes
-                                  put $ --(trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ (trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
                              Nothing ->
                                do let lifetimes' = Map.insert lt (Set.fromList [variableName]) lifetimes
-                                  put $ --(trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ (trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
 
                       Just notThisType ->
-                        --trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
+                        trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
                       _ ->
-                        --trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
+                        trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
         checkThatRefTargetIsAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
@@ -1120,6 +1120,10 @@ manageMemory typeEnv globalEnv root =
             --     Left err -> Left err
             Just (RefTy _ (VarTy lt)) ->
               case performCheck lt of
+                Left err -> Left err
+                Right _ -> Right ()
+            Just (FuncTy (VarTy funcLt) _ _) ->
+              case performCheck (trace ("Lambda lt check: " ++ funcLt) funcLt) of
                 Left err -> Left err
                 Right _ -> Right ()
             Just (FuncTy _ _ (RefTy _ (VarTy lt))) ->
