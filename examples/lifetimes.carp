@@ -189,17 +189,24 @@
 
 (defn dangling-1 []
   (let [b [1 2 3]]
-    &b))
+    &b)) ;; <- &b : (Ref (Array Int) "b")
 
 (defn dangling-2 []
   (let [b [1 2 3]
-        r &b]
+        r &b] ;; <- r : (Ref (Array Int) "b")
     r))
 
-(defn dangling-3 [xs]
+(defn dangling-3 []
+  (let [r &[1 2 3]] ;; <- r : (Ref (Array Int) "_01")
+    r))
+
+(defn dangling-4 [xs]
+  &xs)
+
+(defn not-dangling-1 [xs] ;; <- xs : (Ref (Array Int) "xs")
   (let [r (Array.nth xs 0)]
     r))
 
-(defn dangling-4 [r]
-  (let [q (Array.nth r 0)]
-    q))
+(defn dangling-5 [xs] ;; <- xs : (Array Int)
+  (let [r (Array.nth &xs 0)] ;; <- r : (Ref (Array Int) "xs")
+    r))
