@@ -653,11 +653,11 @@ manageMemory typeEnv globalEnv root =
       case finalObj of
         Left err -> Left err
         Right ok -> case ok of
-                      XObj (Lst (XObj (Defn _) _ _ : _ :  _ : body : _)) _ _ ->
-                        case checkThatRefTargetIsAlive Set.empty (memStateLifetimes finalState) body of
-                          Left err -> Left err
-                          Right () -> let newInfo = fmap (\i -> i { infoDelete = deleteThese }) (info ok)
-                                      in  Right (ok { info = newInfo }, deps)
+                      -- XObj (Lst (XObj (Defn _) _ _ : _ :  _ : body : _)) _ _ ->
+                      --   case checkThatRefTargetIsAlive Set.empty (memStateLifetimes finalState) body of
+                      --     Left err -> Left err
+                      --     Right () -> let newInfo = fmap (\i -> i { infoDelete = deleteThese }) (info ok)
+                      --                 in  Right (ok { info = newInfo }, deps)
                       _ -> let newInfo = fmap (\i -> i { infoDelete = deleteThese }) (info ok)
                            in  Right (ok { info = newInfo }, deps)
 
@@ -1004,16 +1004,20 @@ manageMemory typeEnv globalEnv root =
             XObj (Lst [deref@(XObj Deref _ _), f]) xi xt : args ->
               do -- Do not visit f in this case, we don't want to manage it's memory since it is a ref!
                  visitedArgs <- sequence <$> mapM visitArg args
+                 unmanageResult <- sequence <$> mapM unmanageArg args
                  manage xobj
                  return $ do okArgs <- visitedArgs
+                             okUnmanageResult <- unmanageResult
                              Right (XObj (Lst (XObj (Lst [deref, f]) xi xt : okArgs)) i t)
 
             f : args ->
               do visitedF <- visit  f
                  visitedArgs <- sequence <$> mapM visitArg args
+                 unmanageResult <- sequence <$> mapM unmanageArg args
                  manage xobj
                  return $ do okF <- visitedF
                              okArgs <- visitedArgs
+                             okUnmanageResult <- unmanageResult
                              Right (XObj (Lst (okF : okArgs)) i t)
 
             [] -> return (Right xobj)
@@ -1108,10 +1112,14 @@ manageMemory typeEnv globalEnv root =
         checkThatRefTargetIsAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
         checkThatRefTargetIsAlive deleters lifetimeMappings xobj =
           case ty xobj of
-            Just t ->
-              case sequence (map performCheck (lifetimesInType t)) of
-                Right _ -> Right ()
+            -- Just t ->
+            --   case sequence (map performCheck (lifetimesInType t)) of
+            --     Right _ -> Right ()
+            --     Left err -> Left err
+            Just (RefTy _ (VarTy lt)) ->
+              case performCheck lt of
                 Left err -> Left err
+                Right _ -> Right ()
             _ ->
               Right ()
 
@@ -1159,19 +1167,22 @@ manageMemory typeEnv globalEnv root =
 
         visitArg :: XObj -> State MemState (Either TypeError XObj)
         visitArg xobj@(XObj _ _ (Just t)) =
-          do afterVisit <- if isManaged typeEnv t
-                           then do visitedXObj <- visit  xobj
-                                   result <- unmanage xobj
-                                   case result of
-                                     Left e  -> return (Left e)
-                                     Right _ -> return visitedXObj
-                           else visit xobj
+          do afterVisit <- visit xobj
              addToLifetimesMappingsIfRefLifted False afterVisit
              case afterVisit of
                Right okAfterVisit -> return (Right okAfterVisit)
                Left err -> return (Left err)
         visitArg xobj@XObj{} =
           visit  xobj
+
+        unmanageArg :: XObj -> State MemState (Either TypeError XObj)
+        unmanageArg xobj@(XObj _ _ (Just t)) =
+          if isManaged typeEnv t
+          then do result <- unmanage xobj
+                  case result of
+                    Left e  -> return (Left e)
+                    Right _ -> return (Right xobj)
+          else return (Right xobj)
 
         createDeleter :: XObj -> Maybe Deleter
         createDeleter xobj =

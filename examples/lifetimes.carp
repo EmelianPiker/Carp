@@ -210,3 +210,13 @@
 (defn dangling-5 [xs] ;; <- xs : (Array Int)
   (let [r (Array.nth &xs 0)] ;; <- r : (Ref (Array Int) "xs")
     r))
+
+
+(defn thread [x r]
+  (let [r2 (the (Ref a b) r)]
+    x))
+
+(defn annoy []
+  (let [b [1 2 3]
+        r &b]
+    (thread b r)))
