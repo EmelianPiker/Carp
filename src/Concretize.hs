@@ -662,24 +662,21 @@ manageMemory typeEnv globalEnv root =
   where visit :: XObj -> State MemState (Either TypeError XObj)
         visit xobj =
           do r <- case obj xobj of
-                    Lst _ -> do visitList xobj
-                                -- res <- visitList xobj
-                                -- case res of
-                                --   Right ok -> do addToLifetimesMappingsIfRef True ok
-                                --                  return res
-                                --   Left err -> return (Left err)
+                    Lst _ -> visitList xobj
                     Arr _ -> visitArray xobj
-                    Str _ -> do manage xobj
-                                --addToLifetimesMappingsIfRef xobj
-                                return (Right xobj)
-                    Pattern _ -> do manage xobj
-                                    --addToLifetimesMappingsIfRef xobj
-                                    return (Right xobj)
+                    Str _ ->
+                      do manage xobj
+                         return (Right xobj)
+                    Pattern _ ->
+                      do manage xobj
+                         return (Right xobj)
                     _ ->
                       return (Right xobj)
+             addToLifetimesMappingsIfRef xobj
              case r of
                Right ok -> do MemState deleters _ mappings <- get
-                              case checkThatRefTargetIsAlive deleters mappings ok of --trace ("CHECKING " ++ pretty ok ++ " : " ++ showMaybeTy (ty xobj) ++ ", mappings:\n" ++ prettyLifetimeMappings m ++ "\nAlive: " ++ joinWithComma (map show (Set.toList deleters))) $
+                              --case trace ("CHECKING " ++ pretty ok ++ " : " ++ showMaybeTy (ty xobj) ++ ", mappings:\n" ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ joinWithComma (map show (Set.toList deleters))) (checkThatRefTargetIsAlive deleters mappings ok) of
+                              case checkThatRefTargetIsAlive deleters mappings ok of
                                 Right _ -> return (Right ok)
                                 Left err -> return (Left err)
                Left err -> return (Left err)
@@ -714,8 +711,6 @@ manageMemory typeEnv globalEnv root =
                               modify (\memState ->
                                          memState { memStateDeleters = Set.insert (FakeDeleter cap) (memStateDeleters memState) }))
                           (map getName captures)
-                        -- mapM_ (addToLifetimesMappingsIfRef True) argList
-                        -- mapM_ (addToLifetimesMappingsIfRef True) captures -- For captured variables inside of lifted lambdas
                         visitedBody <- visit  body
                         result <- unmanage body
                         s <- get
@@ -761,7 +756,6 @@ manageMemory typeEnv globalEnv root =
                   do MemState preDeleters _ _ <- get
                      visitedBindings <- mapM visitLetBinding (pairwise bindings)
                      visitedBody <- visit  body
-                     addToLifetimesMappingsIfRefLifted False visitedBody
                      result <- unmanage body
                      case result of
                        Left e -> return (Left e)
@@ -846,7 +840,7 @@ manageMemory typeEnv globalEnv root =
                                           return (XObj (Lst [theExpr, typeXObj, okValue]) i t)
 
             [refExpr@(XObj Ref _ _), value] ->
-              do visitedValue <- visit  value
+              do visitedValue <- visit value
                  case visitedValue of
                    Left e -> return (Left e)
                    Right visitedValue ->
@@ -1069,20 +1063,15 @@ manageMemory typeEnv globalEnv root =
         visitCaseLhs _ =
           return (Right []) -- TODO: Handle nesting!!!
 
-        addToLifetimesMappingsIfRefLifted :: Bool -> Either a XObj -> State MemState ()
-        addToLifetimesMappingsIfRefLifted force (Right xobj) = addToLifetimesMappingsIfRef force xobj
-        addToLifetimesMappingsIfRefLifted _ _ = return ()
-
-        addToLifetimesMappingsIfRef :: Bool -> XObj -> State MemState ()
-        addToLifetimesMappingsIfRef force xobj =
+        addToLifetimesMappingsIfRef :: XObj -> State MemState ()
+        addToLifetimesMappingsIfRef xobj =
           do MemState deleters _ lifetimeMappings <- get
              case getVariableName xobj of
                Right refTarget -> if isVariableAlive (Set.toList deleters) refTarget
                                   then tryToAdd xobj refTarget
-                                  else (trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
+                                  else --(trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
                                        return ()
-               Left notRefTarget | force -> tryToAdd xobj notRefTarget
-                                 | otherwise -> return ()
+               Left notRefTarget -> return ()
 
             where getVariableName xobj =
                     case xobj of
@@ -1098,17 +1087,17 @@ manageMemory typeEnv globalEnv root =
                              Just existing ->
                                do let extendedSet = Set.insert variableName existing
                                       lifetimes' = Map.insert lt extendedSet lifetimes
-                                  put $ (trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ --(trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
                              Nothing ->
                                do let lifetimes' = Map.insert lt (Set.fromList [variableName]) lifetimes
-                                  put $ (trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ --(trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
 
                       Just notThisType ->
-                        trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
+                        --trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
                       _ ->
@@ -1125,6 +1114,7 @@ manageMemory typeEnv globalEnv root =
             Just (FuncTy (VarTy funcLt) _ _) ->
               case xobj of
                 XObj (Lst (XObj (Defn (Just _)) _ _ : _)) _ _ ->
+                  --trace ("Won't check '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj ++ " because it's a lifted lambda.") $
                   Right () -- Don't want to check lifted lambdas outermost scope
                 _ -> case performCheck funcLt of
                        Left err -> Left err
@@ -1173,7 +1163,6 @@ manageMemory typeEnv globalEnv root =
         visitLetBinding :: (XObj, XObj) -> State MemState (Either TypeError (XObj, XObj))
         visitLetBinding  (name, expr) =
           do visitedExpr <- visit expr
-             addToLifetimesMappingsIfRef False expr
              result <- transferOwnership expr name
              return $ case result of
                         Left e -> Left e
@@ -1183,7 +1172,6 @@ manageMemory typeEnv globalEnv root =
         visitArg :: XObj -> State MemState (Either TypeError XObj)
         visitArg xobj@(XObj _ _ (Just t)) =
           do afterVisit <- visit xobj
-             addToLifetimesMappingsIfRefLifted False afterVisit
              case afterVisit of
                Right okAfterVisit -> return (Right okAfterVisit)
                Left err -> return (Left err)
