@@ -47,7 +47,6 @@
   (let [r &[1 2 3]] ;; <- r : (Ref (Array Int) "_01")
     r))
 
-;; Not working?
 (defn dangling-4 [s]
   &(the String s))
 
@@ -70,7 +69,6 @@
   (fn [x]
     &(the String x)))
 
-;; Not working either!
 (defn dangling-8 []
   &[1 2 3])
 

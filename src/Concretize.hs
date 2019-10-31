@@ -724,7 +724,8 @@ manageMemory typeEnv globalEnv root =
                                      allDeleters = memStateDeleters s
                                      namesOfCaptures = map getName captures
                                      nonCapturedDeleters =
-                                       Set.filter (\d -> not (any id (map (deleterMatchesVarName d) namesOfCaptures))) allDeleters
+                                       Set.filter (\d -> not (any id (map (\n -> deleterMatchesVarName n d) namesOfCaptures)))
+                                                  allDeleters
                                      newInfo = ii { infoDelete = nonCapturedDeleters }
                                  return (XObj (Lst [defn, nameSymbol, args, okBody]) (Just newInfo) t)
 
@@ -1108,7 +1109,7 @@ manageMemory typeEnv globalEnv root =
         checkThatRefTargetIsAlive deleters lifetimeMappings xobj =
           case ty xobj of
             Just (RefTy _ (VarTy lt)) ->
-              case performCheck lt of
+              case checkLifetime lt of
                 Left err -> Left err
                 Right _ -> Right ()
             Just (FuncTy (VarTy funcLt) _ _) ->
@@ -1116,31 +1117,29 @@ manageMemory typeEnv globalEnv root =
                 XObj (Lst (XObj (Defn (Just _)) _ _ : _)) _ _ ->
                   --trace ("Won't check '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj ++ " because it's a lifted lambda.") $
                   Right () -- Don't want to check lifted lambdas outermost scope
-                _ -> case performCheck funcLt of
+                _ -> case checkLifetime funcLt of
                        Left err -> Left err
                        Right _ -> Right ()
             Just (FuncTy _ _ (RefTy _ (VarTy lt))) ->
-              case performCheck lt of
+              case checkLifetime lt of
                 Left err -> Left err
                 Right _ -> Right ()
-            -- Just t ->
-            --   trace ("Won't check " ++ pretty xobj ++ " : " ++ show t) $ Right ()
             _ ->
               Right ()
 
-          where performCheck :: String -> Either TypeError XObj
-                performCheck lt =
+          where checkLifetime :: String -> Either TypeError XObj
+                checkLifetime lt =
                   case Map.lookup lt lifetimeMappings of
                     Just deleterNames ->
-                      case sequence (map (checkOne lifetimeMappings lt (Set.toList deleters)) (Set.toList deleterNames)) of
+                      case sequence (map (checkOneLifetime lifetimeMappings lt (Set.toList deleters)) (Set.toList deleterNames)) of
                         Left err -> Left err
                         Right _ -> Right xobj
                     Nothing ->
                       --trace ("Failed to find lifetime key (when checking) '" ++ lt ++ "' for " ++ pretty xobj ++ " in mappings at " ++ prettyInfoFromXObj xobj) $
                       Right xobj
 
-                checkOne :: Map.Map String (Set.Set String) -> String -> [Deleter] -> String -> Either TypeError ()
-                checkOne mappings lt deleters variableName =
+                checkOneLifetime :: Map.Map String (Set.Set String) -> String -> [Deleter] -> String -> Either TypeError ()
+                checkOneLifetime mappings lt deleters variableName =
                   if isVariableAlive deleters variableName
                   then -- trace ("CAN use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
                     Right ()
@@ -1150,15 +1149,7 @@ manageMemory typeEnv globalEnv root =
 
         isVariableAlive :: [Deleter] -> String -> Bool
         isVariableAlive deleters variableName =
-          let matchingDeleters = filter (\case
-                                            ProperDeleter { deleterVariable = dv } -> dv == variableName
-                                            FakeDeleter   { deleterVariable = dv } -> dv == variableName
-                                            PrimDeleter   { aliveVariable = dv } -> dv == variableName
-                                            RefDeleter    { refVariable = dv } -> dv == variableName)
-                                        deleters
-          in case matchingDeleters of
-               [] -> False
-               _ -> True
+          not . null $ filter (deleterMatchesVarName variableName) deleters
 
         visitLetBinding :: (XObj, XObj) -> State MemState (Either TypeError (XObj, XObj))
         visitLetBinding  (name, expr) =
@@ -1218,7 +1209,7 @@ manageMemory typeEnv globalEnv root =
         deletersMatchingXObj :: XObj -> Set.Set Deleter -> [Deleter]
         deletersMatchingXObj xobj deleters =
           let var = varOfXObj xobj
-          in  Set.toList $ Set.filter (\d -> deleterMatchesVarName d var) deleters
+          in  Set.toList $ Set.filter (deleterMatchesVarName var) deleters
 
         isSymbolThatCaptures :: XObj -> Bool
         isSymbolThatCaptures xobj =
@@ -1394,8 +1385,8 @@ lifetimesInType (FuncTy lt argTys retTy) =
   nub . concat $ lifetimesInType lt : lifetimesInType retTy : map lifetimesInType argTys
 lifetimesInType _ = []
 
-deleterMatchesVarName :: Deleter -> String -> Bool
-deleterMatchesVarName deleter var =
+deleterMatchesVarName :: String -> Deleter -> Bool
+deleterMatchesVarName var deleter =
   case deleter of
     ProperDeleter { deleterVariable = dv } -> dv == var
     FakeDeleter   { deleterVariable = dv } -> dv == var
