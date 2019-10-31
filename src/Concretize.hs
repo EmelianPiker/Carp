@@ -700,8 +700,6 @@ manageMemory typeEnv globalEnv root =
               let Just funcTy@(FuncTy _ _ defnReturnType) = t
                   captures = fromMaybe [] (fmap Set.toList maybeCaptures)
               in case defnReturnType of
-                   -- RefTy _ _ ->
-                   --   return (Left (FunctionsCantReturnRefTy xobj funcTy))
                    _ ->
                      do mapM_ manage argList
                         -- Add the captured variables (if any, only happens in lifted lambdas) as fake deleters
@@ -714,20 +712,16 @@ manageMemory typeEnv globalEnv root =
                         visitedBody <- visit  body
                         result <- unmanage body
                         s <- get
-                        put s { memStateDeleters = Set.empty } -- Nothing alive after this!
+                        put s { memStateDeleters = Set.empty } -- Nothing alive after this point (end of function scope)
                         return $
                           case result of
                             Left e -> Left e
                             Right _ ->
                               do okBody <- visitedBody
-                                 let Just ii = i
-                                     allDeleters = memStateDeleters s
-                                     namesOfCaptures = map getName captures
-                                     nonCapturedDeleters =
-                                       Set.filter (\d -> not (any id (map (\n -> deleterMatchesVarName n d) namesOfCaptures)))
-                                                  allDeleters
-                                     newInfo = ii { infoDelete = nonCapturedDeleters }
-                                 return (XObj (Lst [defn, nameSymbol, args, okBody]) (Just newInfo) t)
+                                 let allDeleters = memStateDeleters s
+                                     nonCapturedDeleters = Set.filter (\del -> not (deleterIsCaptured captures del)) allDeleters
+                                     newInfo = fmap (\ii -> ii { infoDelete = nonCapturedDeleters }) i
+                                 return (XObj (Lst [defn, nameSymbol, args, okBody]) newInfo t)
 
             -- Fn / λ (Lambda)
             [fn@(XObj (Fn _ captures) _ _), args@(XObj (Arr argList) _ _), body] ->
@@ -751,8 +745,6 @@ manageMemory typeEnv globalEnv root =
             [letExpr@(XObj Let _ _), XObj (Arr bindings) bindi bindt, body] ->
               let Just letReturnType = t
               in case letReturnType of
-                -- RefTy _ _ ->
-                --   return (Left (LetCantReturnRefTy xobj letReturnType))
                 _ ->
                   do MemState preDeleters _ _ <- get
                      visitedBindings <- mapM visitLetBinding (pairwise bindings)
@@ -1068,10 +1060,11 @@ manageMemory typeEnv globalEnv root =
         addToLifetimesMappingsIfRef xobj =
           do MemState deleters _ lifetimeMappings <- get
              case getVariableName xobj of
-               Right refTarget -> if isVariableAlive (Set.toList deleters) refTarget
-                                  then tryToAdd xobj refTarget
-                                  else --(trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
-                                       return ()
+               Right refTarget ->
+                 if isVariableAlive (Set.toList deleters) refTarget
+                 then tryToAdd xobj refTarget
+                 else --(trace ("Won't add '" ++ refTarget ++ "' to mappings, not alive at " ++ prettyInfoFromXObj xobj)) $
+                      return ()
                Left notRefTarget -> return ()
 
             where getVariableName xobj =
@@ -1100,9 +1093,7 @@ manageMemory typeEnv globalEnv root =
                       Just notThisType ->
                         --trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
-
                       _ ->
-                        trace ("No type on " ++ pretty xobj ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
         checkThatRefTargetIsAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
@@ -1392,3 +1383,8 @@ deleterMatchesVarName var deleter =
     FakeDeleter   { deleterVariable = dv } -> dv == var
     PrimDeleter   { aliveVariable = dv } -> dv == var
     RefDeleter    { refVariable = dv } -> dv == var
+
+deleterIsCaptured :: [XObj] -> Deleter -> Bool
+deleterIsCaptured captures deleter =
+  let namesOfCaptures = map getName captures
+  in  any id (map (\name -> deleterMatchesVarName name deleter) namesOfCaptures)
