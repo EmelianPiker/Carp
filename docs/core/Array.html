@@ -1105,7 +1105,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Array a), (Ref ((λ b) [(Ref a c), (Ref a c)] Bool) d)] (Array a))
+                    (λ [(Array a), (Ref ((λ b) [(Ref a c), (Ref a c)] Bool) b)] (Array a))
                 </p>
                 <pre class="args">
                     (sort-by arr f)
@@ -1125,7 +1125,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref (Array a) b), (Ref ((λ c) [(Ref a b), (Ref a b)] Bool) d)] ())
+                    (λ [(Ref (Array a) b), (Ref ((λ c) [(Ref a b), (Ref a b)] Bool) c)] ())
                 </p>
                 <pre class="args">
                     (sort-by! arr f)
@@ -1165,7 +1165,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref (Array a) b), (Ref ((λ c) [(Ref a d), (Ref a d)] Bool) e)] (Array a))
+                    (λ [(Ref (Array a) b), (Ref ((λ c) [(Ref a d), (Ref a d)] Bool) c)] (Array a))
                 </p>
                 <pre class="args">
                     (sorted-by arr f)
