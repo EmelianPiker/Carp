@@ -1,0 +1,1 @@
+lambda_capturing_two_refs.carp:12:6 The reference 'g' isn't alive.

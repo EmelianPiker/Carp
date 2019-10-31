@@ -1,0 +1,13 @@
+(Project.config "file-path-print-length" "short")
+
+(deftype Blah [x Int])
+
+(defn trick []
+  (let[s1 (Blah.init 100)
+       r1 &s1
+       g (let [s2 (Blah.init 200)
+               r2 &s2
+               f (fn [] (println* r1 r2))]
+           f)]
+    (g) ;; shouldn't work because 's2' has been deleted and 'r2' is thus a dead reference
+    ))
