@@ -1,0 +1,1 @@
+return_ref_to_arg_direct.carp:3:1 The reference '(defn dangling-5 [xs] (Array.nth (ref xs) 0))' isn't alive.

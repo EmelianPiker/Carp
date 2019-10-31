@@ -1,0 +1,4 @@
+(Project.config "file-path-print-length" "short")
+
+(defn dangling-5 [xs] ;; xs : (Array Int)
+  (Array.nth &xs 0))
