@@ -156,7 +156,6 @@
 
 
 (deftype Blah [x Int])
-
 (defn trick []
   (let[s1 (Blah.init 100)
        r1 &s1
@@ -219,4 +218,31 @@
 (defn annoy []
   (let [b [1 2 3]
         r &b]
-    (thread b r)))
+    (thread b r))) ;; <- This used to cause problems since 'r' depends on 'b' being alive, and 'b' is consumed by thread "before" passing 'r'.
+
+
+
+(defn depends []
+  (let [;;b [1 2 3]
+        f (fn [x] (let [y (the (Array String) x)] y))]
+    ()))
+
+
+(defmodule Map
+  (defn update [m k f]
+    (let [idx (Int.positive-mod (hash k) @(n-buckets &m))]
+      (update-buckets m &(fn [b]
+        (let [n (Array.nth &b idx)
+              i (Bucket.find n k)]
+          (if (<= 0 i)
+            ;; currently can't write a Bucket.update that takes f due to bug #347
+            (let [new-b (Bucket.set-idx @n i &(~f (Bucket.get-idx n i)))]
+              (Array.aset b idx new-b))
+            b)))))))
+
+
+(defn bug []
+  (fn [x]
+    (let-do [r &x]
+      (String.delete x)
+      r)))

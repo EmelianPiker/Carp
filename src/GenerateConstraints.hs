@@ -217,7 +217,7 @@ genConstraints typeEnv root = fmap sort (gen root)
                                           retConstraint = Constraint xobjTy retTy xobj func xobj OrdFuncAppRet
                                       in  return (retConstraint : funcConstraints ++ argConstraints ++ insideArgsConstraints)
                                   funcVarTy@(VarTy _) ->
-                                    let fabricatedFunctionType = FuncTy (VarTy "what?!") (List.map forceTy args) (forceTy xobj)
+                                    let fabricatedFunctionType = FuncTy (VarTy (makeTypeVariableNameFromInfo (info func))) (List.map forceTy args) (forceTy xobj)
                                         expected = XObj (Sym (SymPath [] ("Calling '" ++ getName func ++ "'")) Symbol) (info func) Nothing
                                         wholeTypeConstraint = Constraint funcVarTy fabricatedFunctionType func expected xobj OrdFuncAppVarTy
                                     in  return (wholeTypeConstraint : funcConstraints ++ insideArgsConstraints)

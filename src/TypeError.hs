@@ -237,7 +237,7 @@ instance Show TypeError where
     "I encountered a definition that was not at top level: `" ++ pretty xobj ++ "`"
 
   show (UsingDeadReference xobj dependsOn) =
-    "The reference '" ++ pretty xobj ++ --"' : " ++ show (forceTy xobj) ++
+    "The reference '" ++ pretty xobj ++ "'" ++ --"' : " ++ show (forceTy xobj) ++
     " (depending on the variable '" ++ dependsOn ++ "') isn't alive at " ++ prettyInfoFromXObj xobj ++ "."
 
 machineReadableErrorStrings :: FilePathPrintLength -> TypeError -> [String]
