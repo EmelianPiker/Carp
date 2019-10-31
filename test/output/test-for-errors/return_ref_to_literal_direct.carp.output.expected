@@ -1,0 +1,1 @@
+return_ref_to_literal_direct.carp:3:1 The reference '(defn dangling-8 [] (ref [1 2 3]))' isn't alive.

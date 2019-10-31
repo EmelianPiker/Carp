@@ -1,0 +1,4 @@
+(Project.config "file-path-print-length" "short")
+
+(defn dangling-8 []
+  &[1 2 3])

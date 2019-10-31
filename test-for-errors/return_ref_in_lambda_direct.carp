@@ -1,0 +1,6 @@
+(Project.config "file-path-print-length" "short")
+(Debug.sanitize-addresses)
+
+(defn f []
+  (fn [x]
+    (ref (the String x)))) ;; Should trigger an error since the String 'x' will be deleted at the end of the lambda!
