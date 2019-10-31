@@ -1,0 +1,1 @@
+return_ref_to_let_binding.carp:4:3 The reference '(let [b [1 2 3]] (ref b))' isn't alive.

@@ -1,0 +1,5 @@
+(Project.config "file-path-print-length" "short")
+
+(defn dangling-5 [xs] ;; <- xs : (Array Int)
+  (let [r (Array.nth &xs 0)] ;; <- r : (Ref (Array Int) "xs")
+    r))

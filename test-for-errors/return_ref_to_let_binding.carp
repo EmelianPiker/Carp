@@ -1,0 +1,5 @@
+(Project.config "file-path-print-length" "short")
+
+(defn dangling-1 []
+  (let [b [1 2 3]]
+    &b))
