@@ -1154,9 +1154,9 @@ manageMemory typeEnv globalEnv root =
                   if isVariableAlive deleters variableName
                   then -- trace ("CAN use reference " ++ pretty xobj ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show deleterName ++ ") at " ++ prettyInfoFromXObj xobj ++ ", it's not alive here:\n" ++ show xobj ++ "\nMappings: " ++ prettyLifetimeMappings lifetimeMappings ++ "\nAlive: " ++ show deleters ++ "\n") $
                     Right ()
-                  else trace ("Can't use reference " ++ pretty xobj ++ " : " ++ show (forceTy xobj) ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show variableName ++ ") at " ++ prettyInfoFromXObj xobj ++ "\nMappings: " ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ show deleters ++ "\n") $
-                       Right ()
-                       --Left (UsingDeadReference xobj variableName)
+                  else --trace ("Can't use reference " ++ pretty xobj ++ " : " ++ show (forceTy xobj) ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show variableName ++ ") at " ++ prettyInfoFromXObj xobj ++ "\nMappings: " ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ show deleters ++ "\n") $
+                       --Right ()
+                       Left (UsingDeadReference xobj variableName)
 
         isVariableAlive :: [Deleter] -> String -> Bool
         isVariableAlive deleters variableName =

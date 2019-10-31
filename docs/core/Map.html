@@ -170,7 +170,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref ((λ a) [(Ref b c), (Ref d c)] Bool) e), (Ref (Map b d) c)] Bool)
+                    (λ [(Ref ((λ a) [(Ref b c), (Ref d c)] Bool) a), (Ref (Map b d) c)] Bool)
                 </p>
                 <pre class="args">
                     (all? pred m)
@@ -330,7 +330,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref ((λ a) [(Ref b c), (Ref d c)] d) e), (Map b d)] (Map b d))
+                    (λ [(Ref ((λ a) [(Ref b c), (Ref d c)] d) a), (Map b d)] (Map b d))
                 </p>
                 <pre class="args">
                     (endo-map f m)
@@ -350,7 +350,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref (Map a b) c), (Ref ((λ d) [(Ref a c), (Ref b c)] ()) e)] ())
+                    (λ [(Ref (Map a b) c), (Ref ((λ d) [(Ref a c), (Ref b c)] ()) d)] ())
                 </p>
                 <pre class="args">
                     (for-each m f)
@@ -490,7 +490,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Ref ((λ a) [b, (Ref c d), (Ref e d)] b) f), b, (Ref (Map c e) d)] b)
+                    (λ [(Ref ((λ a) [b, (Ref c d), (Ref e d)] b) a), b, (Ref (Map c e) d)] b)
                 </p>
                 <pre class="args">
                     (kv-reduce f init m)
@@ -770,7 +770,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Map a b), (Ref a c), (Ref ((λ d) [b] b) c)] (Map a b))
+                    (λ [(Map a b), (Ref a c), (Ref ((λ c) [b] b) c)] (Map a b))
                 </p>
                 <pre class="args">
                     (update m k f)
@@ -830,7 +830,7 @@
                     defn
                 </div>
                 <p class="sig">
-                    (λ [(Map a b), (Ref a c), (Ref ((λ d) [b] b) c), b] (Map a b))
+                    (λ [(Map a b), (Ref a c), (Ref ((λ c) [b] b) c), b] (Map a b))
                 </p>
                 <pre class="args">
                     (update-with-default m k f v)
