@@ -1079,7 +1079,7 @@ manageMemory typeEnv globalEnv root =
              case getVariableName xobj of
                Right refTarget -> if isVariableAlive (Set.toList deleters) refTarget
                                   then tryToAdd xobj refTarget
-                                  else --(trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
+                                  else (trace ("Won't add '" ++ refTarget ++ "' to mappings because it's not alive at " ++ prettyInfoFromXObj xobj)) $
                                        return ()
                Left notRefTarget | force -> tryToAdd xobj notRefTarget
                                  | otherwise -> return ()
@@ -1098,17 +1098,17 @@ manageMemory typeEnv globalEnv root =
                              Just existing ->
                                do let extendedSet = Set.insert variableName existing
                                       lifetimes' = Map.insert lt extendedSet lifetimes
-                                  put $ --(trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ (trace $ "\nExtended lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
                              Nothing ->
                                do let lifetimes' = Map.insert lt (Set.fromList [variableName]) lifetimes
-                                  put $ --(trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
+                                  put $ (trace $ "\nAdded new lifetimes mappings for '" ++ pretty xobj ++ "' with " ++ show lt ++ " => " ++ show variableName ++ " at " ++ prettyInfoFromXObj xobj ++ ":\n" ++ prettyLifetimeMappings lifetimes') $
                                     m { memStateLifetimes = lifetimes' }
                                   return ()
 
                       Just notThisType ->
-                        --trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
+                        trace ("Won't add variable to mappings! " ++ pretty xobj ++ " : " ++ show notThisType ++ " at " ++ prettyInfoFromXObj xobj) $
                         return ()
 
                       _ ->

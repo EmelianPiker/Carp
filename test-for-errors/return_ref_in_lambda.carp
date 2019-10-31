@@ -1,0 +1,7 @@
+(Project.config "file-path-print-length" "short")
+
+(defn dangling-6 []
+  (fn [x]
+    (let-do [r &x]
+      (String.delete x)
+      r)))

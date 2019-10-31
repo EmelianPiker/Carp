@@ -1,0 +1,1 @@
+return_ref_in_lambda.carp:7:7 The reference 'r' isn't alive.
