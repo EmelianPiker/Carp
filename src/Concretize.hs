@@ -648,7 +648,7 @@ manageMemory typeEnv globalEnv root =
       deleteThese = memStateDeleters finalState
       deps = memStateDeps finalState
   in  -- (trace ("Delete these: " ++ joinWithComma (map show (Set.toList deleteThese)))) $
-      --(trace ("Final mappings for " ++ getName root ++ ":\n" ++ prettyLifetimeMappings (memStateLifetimes finalState))) $
+      -- (trace ("Final mappings for " ++ getName root ++ ":\n" ++ prettyLifetimeMappings (memStateLifetimes finalState))) $
 
     -- NOTE: This might seem redundant but for blocks of code that are not 'defn':s there might be things still to delete, for example when initiating globals
       case finalObj of
@@ -675,8 +675,8 @@ manageMemory typeEnv globalEnv root =
              addToLifetimesMappingsIfRef xobj
              case r of
                Right ok -> do MemState deleters _ mappings <- get
-                              --case trace ("CHECKING " ++ pretty ok ++ " : " ++ showMaybeTy (ty xobj) ++ ", mappings:\n" ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ joinWithComma (map show (Set.toList deleters))) (checkThatRefTargetIsAlive deleters mappings ok) of
-                              case checkThatRefTargetIsAlive deleters mappings ok of
+                              --case trace ("CHECKING " ++ pretty ok ++ " : " ++ showMaybeTy (ty xobj) ++ ", mappings:\n" ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ joinWithComma (map show (Set.toList deleters))) (isRefAlive deleters mappings ok) of
+                              case isRefAlive deleters mappings ok of
                                 Right _ -> return (Right ok)
                                 Left err -> return (Left err)
                Left err -> return (Left err)
@@ -1096,38 +1096,32 @@ manageMemory typeEnv globalEnv root =
                       _ ->
                         return ()
 
-        checkThatRefTargetIsAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
-        checkThatRefTargetIsAlive deleters lifetimeMappings xobj =
-          case ty xobj of
-            Just (RefTy _ (VarTy lt)) ->
-              case checkLifetime lt of
-                Left err -> Left err
-                Right _ -> Right ()
-            Just (FuncTy (VarTy funcLt) _ _) ->
-              case xobj of
-                XObj (Lst (XObj (Defn (Just _)) _ _ : _)) _ _ ->
-                  --trace ("Won't check '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj ++ " because it's a lifted lambda.") $
-                  Right () -- Don't want to check lifted lambdas outermost scope
-                _ -> case checkLifetime funcLt of
-                       Left err -> Left err
-                       Right _ -> Right ()
-            Just (FuncTy _ _ (RefTy _ (VarTy lt))) ->
-              case checkLifetime lt of
-                Left err -> Left err
-                Right _ -> Right ()
-            _ ->
-              Right ()
+        isRefAlive :: Set.Set Deleter -> Map.Map String (Set.Set String) -> XObj -> Either TypeError ()
+        isRefAlive deleters lifetimeMappings xobj =
+           -- Don't want to check lifted lambdas outermost scope
+          if isLiftedLambda xobj
+          then
+            --trace ("Won't check '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj ++ " because it's a lifted lambda.") $
+            case ty xobj of
+               Just (FuncTy _ _ (RefTy _ (VarTy lt))) -> checkLifetime lt
+               _                                      -> Right ()
+          else
+            case ty xobj of
+              Just (RefTy _ (VarTy lt))              -> checkLifetime lt
+              Just (FuncTy (VarTy funcLt) _ _)       -> checkLifetime funcLt
+              Just (FuncTy _ _ (RefTy _ (VarTy lt))) -> checkLifetime lt
+              _                                      -> Right ()
 
-          where checkLifetime :: String -> Either TypeError XObj
+          where checkLifetime :: String -> Either TypeError ()
                 checkLifetime lt =
                   case Map.lookup lt lifetimeMappings of
                     Just deleterNames ->
                       case sequence (map (checkOneLifetime lifetimeMappings lt (Set.toList deleters)) (Set.toList deleterNames)) of
                         Left err -> Left err
-                        Right _ -> Right xobj
+                        Right _ -> Right ()
                     Nothing ->
                       --trace ("Failed to find lifetime key (when checking) '" ++ lt ++ "' for " ++ pretty xobj ++ " in mappings at " ++ prettyInfoFromXObj xobj) $
-                      Right xobj
+                      Right ()
 
                 checkOneLifetime :: Map.Map String (Set.Set String) -> String -> [Deleter] -> String -> Either TypeError ()
                 checkOneLifetime mappings lt deleters variableName =
@@ -1136,7 +1130,7 @@ manageMemory typeEnv globalEnv root =
                     Right ()
                   else --trace ("Can't use reference " ++ pretty xobj ++ " : " ++ show (forceTy xobj) ++ " (with lifetime '" ++ lt ++ "', depending on " ++ show variableName ++ ") at " ++ prettyInfoFromXObj xobj ++ "\nMappings: " ++ prettyLifetimeMappings mappings ++ "\nAlive: " ++ show deleters ++ "\n") $
                        --Right ()
-                       Left (UsingDeadReference xobj variableName)
+                    Left (UsingDeadReference xobj variableName)
 
         isVariableAlive :: [Deleter] -> String -> Bool
         isVariableAlive deleters variableName =
@@ -1388,3 +1382,7 @@ deleterIsCaptured :: [XObj] -> Deleter -> Bool
 deleterIsCaptured captures deleter =
   let namesOfCaptures = map getName captures
   in  any id (map (\name -> deleterMatchesVarName name deleter) namesOfCaptures)
+
+isLiftedLambda :: XObj -> Bool
+isLiftedLambda (XObj (Lst (XObj (Defn (Just _)) _ _ : _)) _ _) = True
+isLiftedLambda _ = False

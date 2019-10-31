@@ -1,0 +1,1 @@
+return_ref_in_lambda_direct.carp:5:3 The reference '(defn <> _Lambda_f_12 [x] (ref (the String x)))' isn't alive.
