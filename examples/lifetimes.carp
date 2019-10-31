@@ -82,3 +82,11 @@
   (let [b [1 2 3]
         r &b]
     (thread b r))) ;; <- This used to cause problems since 'r' depends on 'b' being alive, and 'b' is consumed by thread "before" passing 'r'.
+
+
+
+(defn fool []
+  (if true
+    "hej"
+    (let [s @"DATA"]
+      &s)))

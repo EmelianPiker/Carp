@@ -832,15 +832,22 @@ manageMemory typeEnv globalEnv root =
                             Right _ -> do okValue <- visitedValue
                                           return (XObj (Lst [theExpr, typeXObj, okValue]) i t)
 
+            -- Ref
             [refExpr@(XObj Ref _ _), value] ->
               do visitedValue <- visit value
                  case visitedValue of
                    Left e -> return (Left e)
                    Right visitedValue ->
-                     do checkResult <- refCheck visitedValue
-                        case checkResult of
-                          Left e -> return (Left e)
-                          Right () -> return $ Right (XObj (Lst [refExpr, visitedValue]) i t)
+                     case ty xobj of
+                       -- Just (RefTy _ StaticLifetimeTy)
+                       --   | isGlobalVariable value -> ok
+                       --   | otherwise -> error ("Found static lifetime on non-static value: '" ++ pretty xobj ++
+                       --                         "' at " ++ prettyInfoFromXObj xobj)
+                       _ -> ok
+                     where ok = do checkResult <- refCheck visitedValue
+                                   case checkResult of
+                                     Left e -> return (Left e)
+                                     Right () -> return $ Right (XObj (Lst [refExpr, visitedValue]) i t)
 
             (XObj Deref _ _ : _) ->
               error "Shouldn't end up here, deref only works when calling a function, i.e. ((deref f) 1 2 3)."
@@ -1223,10 +1230,7 @@ manageMemory typeEnv globalEnv root =
         refCheck xobj =
           let Just i = info xobj
               Just t = ty xobj
-              isGlobalVariable = case xobj of
-                                   XObj (Sym _ (LookupGlobal _ _)) _ _ -> True
-                                   _ -> False
-          in if not isGlobalVariable && not (isGlobalFunc xobj) && isManaged typeEnv t && not (isExternalType typeEnv t) && not (isSymbolThatCaptures xobj) -- TODO: The 'isManaged typeEnv t' boolean check should be removed!
+          in if not (isGlobalVariable xobj) && not (isGlobalFunc xobj) && isManaged typeEnv t && not (isExternalType typeEnv t) && not (isSymbolThatCaptures xobj) -- TODO: The 'isManaged typeEnv t' boolean check should be removed!
              then do MemState deleters deps lifetimes <- get
                      case deletersMatchingXObj xobj deleters of
                        [] ->  return (Left (GettingReferenceToUnownedValue xobj))
@@ -1376,7 +1380,6 @@ deleterMatchesVarName var deleter =
     ProperDeleter { deleterVariable = dv } -> dv == var
     FakeDeleter   { deleterVariable = dv } -> dv == var
     PrimDeleter   { aliveVariable = dv } -> dv == var
-    RefDeleter    { refVariable = dv } -> dv == var
 
 deleterIsCaptured :: [XObj] -> Deleter -> Bool
 deleterIsCaptured captures deleter =
@@ -1386,3 +1389,7 @@ deleterIsCaptured captures deleter =
 isLiftedLambda :: XObj -> Bool
 isLiftedLambda (XObj (Lst (XObj (Defn (Just _)) _ _ : _)) _ _) = True
 isLiftedLambda _ = False
+
+isGlobalVariable :: XObj -> Bool
+isGlobalVariable (XObj (Sym _ (LookupGlobal _ _)) _ _) = True
+isGlobalVariable _ = False
