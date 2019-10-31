@@ -1166,7 +1166,7 @@ manageMemory typeEnv globalEnv root =
         createDeleter :: XObj -> Maybe Deleter
         createDeleter xobj =
           case ty xobj of
-            Just (RefTy _ _) -> Just (RefDeleter (varOfXObj xobj))
+            Just (RefTy _ _) -> Nothing
             Just t -> let var = varOfXObj xobj
                       in  if isExternalType typeEnv t
                           then Just (FakeDeleter var)
