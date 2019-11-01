@@ -841,8 +841,9 @@ manageMemory typeEnv globalEnv root =
                      case ty xobj of
                        -- Just (RefTy _ StaticLifetimeTy)
                        --   | isGlobalVariable value -> ok
-                       --   | otherwise -> error ("Found static lifetime on non-static value: '" ++ pretty xobj ++
-                       --                         "' at " ++ prettyInfoFromXObj xobj)
+                       --   | isLiteral value -> ok
+                       --   | otherwise -> --error ("Found static lifetime on non-static value: '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj)
+                       --       trace ("Found static lifetime on non-static value: '" ++ pretty xobj ++ "' at " ++ prettyInfoFromXObj xobj) ok
                        _ -> ok
                      where ok = do checkResult <- refCheck visitedValue
                                    case checkResult of

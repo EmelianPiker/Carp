@@ -90,3 +90,19 @@
     "hej"
     (let [s @"DATA"]
       &s)))
+(info fool)
+
+
+
+(defn lam []
+  (let [r &[1 2 3]
+        f &(fn [] (IO.println &(str r)))]
+    ()))
+(info lam)
+
+
+
+
+(defn e [x]
+  (= "hej" &x))
+(info e)
