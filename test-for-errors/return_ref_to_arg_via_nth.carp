@@ -1,4 +1,4 @@
 (Project.config "file-path-print-length" "short")
 
 (defn f [xs] ;; xs : (Array Int)
-  (Array.nth &xs 0)) ;; <- xs will die here so the ref will be invalid
+  (Array.unsafe-nth &xs 0)) ;; <- xs will die here so the ref will be invalid
